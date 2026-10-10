@@ -7,6 +7,9 @@ connection lifecycles, and middleware.
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from app.api.routers import (
     admin_router,
@@ -20,7 +23,7 @@ from app.core.logging import logger
 from app.db.indexes import create_indexes
 from app.db.mongodb import close_mongo_client, get_database
 from app.db.redis import close_redis_client
-from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware import CorrelationIdMiddleware, RateLimitMiddleware
 from app.schemas.analytics import (
     DepartmentSummary,
     DepartmentSummaryItem,
@@ -55,13 +58,15 @@ async def lifespan(app: FastAPI):
     """
     Application lifespan context manager: initializes database client and indexes,
     then closes database and Redis connections on shutdown.
+    Fails fast if mandatory index creation fails.
     """
     logger.info("Starting up application; verifying database and indexes...")
     database = get_database()
     try:
         create_indexes(database)
     except Exception as exc:
-        logger.warning("Index initialization notice during startup: %s", exc)
+        logger.critical("Mandatory index initialization failed during startup: %s", exc)
+        raise RuntimeError(f"Database index initialization failure: {exc}") from exc
     yield
     logger.info("Shutting down application; closing database connections...")
     close_mongo_client()
@@ -74,9 +79,43 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Request tracing and correlation ID middleware
+app.add_middleware(CorrelationIdMiddleware)
+
+# Cross-Origin Resource Sharing (explicitly configured origins, prevent wildcard with credentials)
+cors_has_wildcard = "*" in settings.CORS_ORIGINS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=not cors_has_wildcard,  # Wildcard origins cannot be combined with credentialed CORS
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
+
 # Extended mode: Register Redis-backed rate limiting middleware
 if settings.RATE_LIMIT_ENABLED:
     app.add_middleware(RateLimitMiddleware)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Catches unhandled exceptions and sanitizes 500 responses without exposing internals."""
+    req_id = getattr(request.state, "request_id", "unknown")
+    logger.error(
+        "Unhandled exception [req_id=%s] on %s %s: %s",
+        req_id,
+        request.method,
+        request.url.path,
+        exc,
+        exc_info=True,
+    )
+    headers = {"X-Request-ID": req_id} if req_id != "unknown" else {}
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers=headers,
+    )
+
 
 # Authoritative Router Registration (One Authoritative Handler Per Endpoint)
 app.include_router(health_router)

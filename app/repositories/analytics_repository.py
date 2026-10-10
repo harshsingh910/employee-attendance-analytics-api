@@ -1,9 +1,11 @@
 """
 Analytics and Aggregation Pipelines Repository
 """
+import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from bson import json_util
 from pymongo.database import Database
 
 from app.db.mongodb import get_database
@@ -421,4 +423,5 @@ class AnalyticsRepository:
             "explain": command,
             "verbosity": "executionStats",
         }
-        return self.db.command(explain_cmd)
+        res = self.db.command(explain_cmd)
+        return json.loads(json_util.dumps(res))

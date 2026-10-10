@@ -97,3 +97,55 @@ def test_explain_department_trend(client: TestClient, seed_performance_dataset):
     assert "explain" in plan
     inner = plan["explain"]
     assert "executionStats" in inner or "stages" in inner or "queryPlanner" in inner
+    # Verify command pipeline has department emp_code in match
+    cmd = inner.get("command", {})
+    pipeline = cmd.get("pipeline", [])
+    assert len(pipeline) >= 1
+    match_stage = pipeline[0].get("$match", {})
+    assert "emp_code" in match_stage
+    assert "$in" in match_stage["emp_code"]
+    assert match_stage["date"] == {"$gte": "2026-03-01", "$lte": "2026-03-14"}
+    plan_str = str(inner)
+    assert "IXSCAN" in plan_str
+    assert "COLLSCAN" not in plan_str
+
+
+def test_explain_department_trend_october_regression(client: TestClient, seed_performance_dataset):
+    """Regression test for GET /admin/explain/department_trend?department=Engineering&from=2026-10-01&to=2026-10-31."""
+    res = client.get("/admin/explain/department_trend?department=Engineering&from=2026-10-01&to=2026-10-31")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["endpoint"] == "department_trend"
+    assert data["collection"] == "attendance_logs"
+    explain_data = data["explain"]
+    cmd = explain_data.get("command", {})
+    pipeline = cmd.get("pipeline", [])
+    assert len(pipeline) >= 1
+    match_stage = pipeline[0].get("$match", {})
+    # Verify exact October date range and absence of March fallback
+    assert match_stage["date"] == {"$gte": "2026-10-01", "$lte": "2026-10-31"}
+    assert "2026-03" not in str(pipeline)
+    assert "emp_code" in match_stage
+    assert "$in" in match_stage["emp_code"]
+    plan_str = str(explain_data)
+    assert "IXSCAN" in plan_str
+    assert "COLLSCAN" not in plan_str
+
+
+
+def test_explain_attendance_list_exact_regression(client: TestClient, seed_performance_dataset):
+    """Regression test for GET /admin/explain/attendance_list?emp_code=EMP1002&date_from=2026-10-01&date_to=2026-10-31&page=1&page_size=20."""
+    res = client.get("/admin/explain/attendance_list?emp_code=EMP1002&date_from=2026-10-01&date_to=2026-10-31&page=1&page_size=20")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["endpoint"] == "attendance_list"
+    assert data["collection"] == "attendance_logs"
+    explain_data = data["explain"]
+    assert "executionStats" in explain_data
+    stats = explain_data["executionStats"]
+    assert stats["executionSuccess"] is True
+    # Ensure execution plan information confirms index usage
+    plan_str = str(explain_data)
+    assert "IXSCAN" in plan_str
+    assert "COLLSCAN" not in plan_str
+

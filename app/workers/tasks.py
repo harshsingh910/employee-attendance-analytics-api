@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 
 from app.core.logging import logger
 from app.db.mongodb import get_database
+from app.utils.datetime_utils import round_half_up
 from app.workers.celery_app import celery_app
 
 
@@ -25,12 +26,16 @@ def generate_monthly_attendance_report(self, emp_code: str, year: int, month: in
     task_id = self.request.id if getattr(self, "request", None) else "direct"
     logger.info("Starting monthly report task [%s] for emp_code=%s (%04d-%02d)", task_id, emp_code, year, month)
     try:
+        # Validate year and month
+        if not isinstance(year, int) or not isinstance(month, int) or month < 1 or month > 12 or year < 1900 or year > 2100:
+            raise ValueError(f"Invalid year or month: year={year}, month={month}")
+
         db = get_database()
         emp = db.employees.find_one({"emp_code": emp_code}, {"_id": 0})
         if not emp:
             raise ValueError(f"Employee with emp_code '{emp_code}' not found")
 
-        # Query month's logs
+        # Query month's logs with exact calendar boundaries
         start_date = f"{year:04d}-{month:02d}-01"
         if month == 12:
             end_date = f"{year + 1:04d}-01-01"
@@ -44,10 +49,21 @@ def generate_monthly_attendance_report(self, emp_code: str, year: int, month: in
             )
         )
 
-        present_days = sum(1 for log in logs if log.get("status") in ("PRESENT", "WFH", "ON_DUTY"))
-        half_days = sum(1 for log in logs if log.get("status") == "HALF_DAY")
+        # Accurately distinguish full present days and half-days (via half_day boolean or legacy status)
+        full_present_days = sum(
+            1 for log in logs
+            if log.get("status") in ("PRESENT", "WFH", "ON_DUTY") and not log.get("half_day")
+        )
+        half_days = sum(
+            1 for log in logs
+            if log.get("half_day") is True or log.get("status") == "HALF_DAY"
+        )
+        present_days = full_present_days
+        absent_days = sum(1 for log in logs if log.get("status") == "ABSENT")
+        leave_days = sum(1 for log in logs if log.get("status") == "LEAVE")
         total_hours = sum(log.get("work_hours", 0.0) for log in logs)
         total_late = sum(log.get("late_minutes", 0) for log in logs)
+        total_overtime = sum(log.get("overtime_minutes", 0) for log in logs)
 
         idempotency_key = f"monthly_report:{emp_code}:{year:04d}:{month:02d}"
         report = {
@@ -61,8 +77,11 @@ def generate_monthly_attendance_report(self, emp_code: str, year: int, month: in
             "total_records": len(logs),
             "present_days": present_days,
             "half_days": half_days,
-            "total_work_hours": round(total_hours, 2),
+            "absent_days": absent_days,
+            "leave_days": leave_days,
+            "total_work_hours": round_half_up(total_hours, 2),
             "total_late_minutes": total_late,
+            "total_overtime_minutes": total_overtime,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -99,6 +118,9 @@ def export_department_analytics(self, department: str, year: int, month: int) ->
     task_id = self.request.id if getattr(self, "request", None) else "direct"
     logger.info("Starting department export task [%s] for department=%s (%04d-%02d)", task_id, department, year, month)
     try:
+        if not isinstance(year, int) or not isinstance(month, int) or month < 1 or month > 12 or year < 1900 or year > 2100:
+            raise ValueError(f"Invalid year or month: year={year}, month={month}")
+
         db = get_database()
         employees = list(db.employees.find({"department": department}, {"_id": 0, "emp_code": 1}))
         emp_codes = [e["emp_code"] for e in employees]

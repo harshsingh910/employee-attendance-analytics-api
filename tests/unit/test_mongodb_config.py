@@ -50,3 +50,40 @@ def test_mongodb_connection_failure_raises_server_timeout():
             pass  # Expected behavior
         finally:
             close_mongo_client()
+
+
+def test_explain_command_serializes_bson_types():
+    from unittest.mock import MagicMock
+
+    from bson.binary import Binary
+    from bson.timestamp import Timestamp
+    from fastapi.encoders import jsonable_encoder
+
+    from app.repositories.analytics_repository import AnalyticsRepository
+
+    mock_db = MagicMock()
+    mock_db.command.return_value = {
+        "executionStats": {"executionSuccess": True, "nReturned": 1},
+        "$clusterTime": {
+            "clusterTime": Timestamp(12345678, 1),
+            "signature": {
+                "hash": Binary(b"\x01\x02\x03\x04"),
+                "raw_bytes": b"\xaa\xbb\xcc",
+                "keyId": 1234567890,
+            },
+        },
+        "operationTime": Timestamp(12345678, 1),
+    }
+
+    repo = AnalyticsRepository(mock_db)
+    result = repo.explain_command("attendance_logs", {"find": "attendance_logs"})
+
+    # Must be serializable by FastAPI's jsonable_encoder without raising ValueError / TypeError
+    encoded = jsonable_encoder(result)
+    assert encoded["executionStats"]["executionSuccess"] is True
+    assert "$clusterTime" in encoded
+    assert "clusterTime" in encoded["$clusterTime"]
+    assert "signature" in encoded["$clusterTime"]
+    assert "hash" in encoded["$clusterTime"]["signature"]
+    assert "operationTime" in encoded
+

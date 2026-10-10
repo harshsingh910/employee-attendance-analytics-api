@@ -34,5 +34,15 @@ class Settings:
         self.CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://localhost:6379/0"))
         self.CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", os.getenv("REDIS_URL", "redis://localhost:6379/1"))
 
+        # CORS Configuration: Safe default trusted origins for local frontend/API development
+        # In production, set CORS_ORIGINS to explicit HTTPS origins (e.g., https://app.example.com)
+        raw_origins = os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:8000",
+        )
+        self.CORS_ORIGINS: list[str] = [
+            origin.strip() for origin in raw_origins.split(",") if origin.strip()
+        ]
+
 
 settings = Settings()

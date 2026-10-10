@@ -23,3 +23,43 @@ def health(db: Database = Depends(get_db)):
             status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database unavailable",
         )
+
+
+@router.get("/health/live", include_in_schema=False)
+def liveness():
+    """Liveness probe: verifies process is alive without external service dependency."""
+    return {"status": "alive"}
+
+
+@router.get("/health/ready", include_in_schema=False)
+def readiness(db: Database = Depends(get_db)):
+    """Readiness probe: verifies critical dependencies (MongoDB, and Redis if enabled)."""
+    from app.core.config import settings
+    checks = {}
+    is_ready = True
+
+    try:
+        db.client.admin.command("ping")
+        checks["mongodb"] = "ok"
+    except Exception as exc:
+        checks["mongodb"] = f"unavailable: {exc}"
+        is_ready = False
+
+    if settings.RATE_LIMIT_ENABLED:
+        from app.db.redis import ping_redis
+
+        if ping_redis():
+            checks["redis"] = "ok"
+        else:
+            checks["redis"] = "unavailable"
+            is_ready = False
+    else:
+        checks["redis"] = "skipped"
+
+    if not is_ready:
+        raise HTTPException(
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service dependencies not ready",
+        )
+
+    return {"status": "ready", "checks": checks}

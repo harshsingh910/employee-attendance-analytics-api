@@ -11,8 +11,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application source code
+# Create non-root application user and group for container security
+RUN groupadd -r appgroup && useradd -r -g appgroup -d /app -s /sbin/nologin appuser
+
+# Copy application source code and set ownership
 COPY . .
+RUN chown -R appuser:appgroup /app
+
+# Run container as unprivileged user
+USER appuser
 
 # Expose FastAPI port
 EXPOSE 8000

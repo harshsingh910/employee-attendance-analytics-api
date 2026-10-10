@@ -3,9 +3,10 @@ Employee Request and Response Schemas
 """
 from __future__ import annotations
 
+from datetime import date as dt_date
 from typing import List
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class EmployeeCreate(BaseModel):
@@ -16,6 +17,15 @@ class EmployeeCreate(BaseModel):
     shift_start: str = Field("09:30", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     shift_end: str = Field("18:30", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     joined_on: str = Field(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
+
+    @field_validator("joined_on")
+    @classmethod
+    def validate_joined_on(cls, v: str) -> str:
+        try:
+            dt_date.fromisoformat(v)
+        except ValueError as err:
+            raise ValueError(f"joined_on must be a valid calendar date: {err}") from err
+        return v
 
     @model_validator(mode="after")
     def validate_shift_times(self) -> EmployeeCreate:

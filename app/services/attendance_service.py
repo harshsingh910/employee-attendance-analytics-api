@@ -1,6 +1,7 @@
 """
 Attendance Domain Service
 """
+from datetime import date as dt_date
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -188,11 +189,36 @@ class AttendanceService:
         page: int = 1,
         page_size: int = 20,
     ) -> AttendancePage:
-        if date_from and date_to and date_from > date_to:
-            raise HTTPException(
-                status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="date_from must not be after date_to",
-            )
+        if date_from:
+            try:
+                dt_date.fromisoformat(date_from)
+            except ValueError:
+                raise HTTPException(
+                    status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Invalid calendar date for date_from: {date_from}",
+                )
+        if date_to:
+            try:
+                dt_date.fromisoformat(date_to)
+            except ValueError:
+                raise HTTPException(
+                    status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Invalid calendar date for date_to: {date_to}",
+                )
+
+        if date_from and date_to:
+            if date_from > date_to:
+                raise HTTPException(
+                    status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="date_from must not be after date_to",
+                )
+            d_start = dt_date.fromisoformat(date_from)
+            d_end = dt_date.fromisoformat(date_to)
+            if (d_end - d_start).days > 366:
+                raise HTTPException(
+                    status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Date range must not exceed 366 days",
+                )
 
         skip = (page - 1) * page_size
         items_raw, total = self.att_repo.list_attendance(
@@ -209,6 +235,14 @@ class AttendanceService:
     def regularize(
         self, emp_code: str, date: str, body: RegularizeRequest
     ) -> AttendanceRecord:
+        try:
+            dt_date.fromisoformat(date)
+        except ValueError:
+            raise HTTPException(
+                status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid calendar date: {date}",
+            )
+
         emp = self.emp_repo.get_by_emp_code(emp_code)
         if not emp:
             raise HTTPException(

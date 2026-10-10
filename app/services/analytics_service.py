@@ -259,11 +259,59 @@ class AnalyticsService:
             return {"endpoint": endpoint, "collection": "attendance_logs", "explain": exp_res}
 
         if endpoint == "department_trend":
-            f_d = from_date or "2026-03-01"
-            t_d = to_date or "2026-03-15"
+            f_d = from_date or date_from
+            t_d = to_date or date_to
+            if not department or not f_d or not t_d:
+                raise HTTPException(
+                    status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="department, from, and to are required",
+                )
+            if t_d < f_d:
+                raise HTTPException(
+                    status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="to date must be greater than or equal to from date",
+                )
+            d_start = dt_date.fromisoformat(f_d)
+            d_end = dt_date.fromisoformat(t_d)
+            days_count = (d_end - d_start).days + 1
+            if days_count > 92:
+                raise HTTPException(
+                    status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Date range must not exceed 92 days",
+                )
+
+            dept_emps = self.emp_repo.get_department_employees(department)
+            if not dept_emps:
+                raise HTTPException(
+                    status_code=http_status.HTTP_404_NOT_FOUND,
+                    detail="Department not found",
+                )
+
+            dept_emp_codes = [e["emp_code"] for e in dept_emps]
             pipeline = [
-                {"$match": {"date": {"$gte": f_d, "$lte": t_d}}},
-                {"$group": {"_id": "$date", "present_count": {"$sum": 1}}},
+                {
+                    "$match": {
+                        "emp_code": {"$in": dept_emp_codes},
+                        "date": {"$gte": f_d, "$lte": t_d},
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": "$date",
+                        "present_count": {
+                            "$sum": {
+                                "$cond": [
+                                    {"$in": ["$status", ["PRESENT", "WFH", "ON_DUTY"]]},
+                                    {"$cond": ["$half_day", 0.5, 1.0]},
+                                    0.0,
+                                ]
+                            }
+                        },
+                        "late_count": {
+                            "$sum": {"$cond": [{"$gt": [{"$ifNull": ["$late_minutes", 0]}, 0]}, 1, 0]}
+                        },
+                    }
+                },
                 {"$sort": {"_id": 1}},
             ]
             cmd = {"aggregate": "attendance_logs", "pipeline": pipeline, "cursor": {}}
