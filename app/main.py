@@ -9,18 +9,17 @@ from __future__ import annotations
 import calendar
 import math
 import os
-import re
 from contextlib import asynccontextmanager
-from datetime import date as dt_date, datetime, time, timedelta, timezone
-from decimal import Decimal, ROUND_HALF_UP
+from datetime import date as dt_date
+from datetime import datetime, timedelta, timezone
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Dict, List, Optional
 
 from bson import json_util
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Path, Request, status as http_status
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator, model_validator
+from fastapi import FastAPI, HTTPException, Path, Query
+from fastapi import status as http_status
+from pydantic import BaseModel, Field, model_validator
 from pymongo import MongoClient, ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
@@ -105,6 +104,14 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+
+# Extended mode: Register Redis-backed rate limiting middleware
+try:
+    from app.middleware.rate_limit import RateLimitMiddleware
+
+    app.add_middleware(RateLimitMiddleware)
+except ImportError:
+    pass
 
 
 # --------------------------------------------------------------------------- #

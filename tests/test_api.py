@@ -2,18 +2,17 @@
 Comprehensive Test Suite for HROne Employee Attendance & Analytics API
 Covers R1-R10, all endpoints, edge cases, race conditions, explain query plans, and concurrency.
 """
-import calendar
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+import concurrent.futures
+import os
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
-from pymongo import MongoClient
 
-import os
 os.environ["MONGO_URI"] = "mongodb://localhost:27017"
 os.environ["MONGO_DB"] = "test_attendance_db"
 
-from app.main import app, get_db, create_indexes, IST, round_half_up
+from app.main import app, create_indexes, get_db
 
 
 @pytest.fixture(scope="session")
@@ -516,7 +515,7 @@ def test_explain_endpoints(client):
 # --------------------------------------------------------------------------- #
 # 12. Concurrency and Race Condition Tests
 # --------------------------------------------------------------------------- #
-import concurrent.futures
+
 
 def test_concurrent_employee_creation(client):
     payload = {
