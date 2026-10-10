@@ -7,11 +7,12 @@ from pymongo.database import Database
 from pymongo.errors import PyMongoError
 
 from app.api.dependencies import get_db
+from app.schemas.common import ErrorResponse
 
 router = APIRouter(tags=["system"])
 
 
-@router.get("/health")
+@router.get("/health", responses={503: {"model": ErrorResponse, "description": "Database unavailable"}})
 def health(db: Database = Depends(get_db)):
     """Health check endpoint verifying MongoDB connectivity."""
     try:

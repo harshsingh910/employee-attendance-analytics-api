@@ -160,6 +160,7 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/1
 ### Step 4: Verify Indexes & Seed Data
 ```bash
 python scripts/check_indexes.py
+python scripts/migrate_indexes.py  # Safe pre-migration check (use --apply to apply migrations)
 python scripts/seed_database.py
 ```
 
@@ -234,31 +235,39 @@ Supported background tasks:
 
 ## 8. Test Execution and Verification
 
-The test suite covers unit, integration, concurrency, performance, Redis rate limiting, and Celery background workers:
+The test suite covers unit, integration, concurrency, performance, OpenAPI contract parity, Redis rate limiting, and Celery background workers:
 
 ```bash
 pytest -v
 ```
 
 ### Test Suite Summary:
-- **Baseline Suite (`tests/test_api.py`)**: 20 comprehensive end-to-end integration tests.
+- **Baseline Functional Suite (`tests/test_api.py`)**: 19 comprehensive end-to-end integration tests.
 - **Unit Suite (`tests/unit/`)**:
   - `test_attendance_calculator.py`: 7 tests verifying R1–R7 calculations, boundary conditions, rounding, and overtime.
-  - `test_rate_limiter.py`: 5 tests verifying allowed requests, 429 exhaustion, Retry-After header, window expiration, and fail-closed 503 behavior.
-  - `test_celery_tasks.py`: 3 tests verifying task idempotency, reporting calculations, and error handling.
+  - `test_rate_limiter.py`: 10 tests verifying allowed requests, 429 exhaustion, Retry-After header, window expiration, fail-closed 503 behavior, IP extraction, untrusted proxy defense, and thread concurrency.
+  - `test_celery_tasks.py`: 8 tests verifying task idempotency, reporting calculations, cross-year separation, no retry on permanent validation errors, and thread concurrency.
 - **Integration Suite (`tests/integration/`)**:
   - `test_modular_api.py`: 4 full workflow tests covering health, employee lifecycle, attendance, regularization, and analytics.
   - `test_concurrency_race.py`: 3 concurrent race tests executing simultaneous requests against unique indexes and atomic updates.
+  - `test_lifecycle.py`: 3 lifecycle tests verifying startup/shutdown and health probes with MongoDB available vs unavailable.
+  - `test_openapi_contract.py`: 5 automated tests verifying runtime schema parity, status codes, parameters, and request body schemas against official `openapi.yaml`.
 - **Performance Suite (`tests/performance/`)**:
   - `test_explain_performance.py`: 5 tests verifying execution plan stats on a 100-employee synthetic dataset.
 
-**Total**: **47 tests passed (100% pass rate)** in under 3 seconds.
+**Total**: **64 tests passed (100% pass rate)** in ~3.0 seconds.
 
 ### Linting & Formatting Check:
 ```bash
 ruff check .
 ```
 Result: **Zero errors. All checks passed.**
+
+### Static Type Check:
+```bash
+mypy app --ignore-missing-imports
+```
+Result: **Success: no issues found in 40 source files.**
 
 ---
 

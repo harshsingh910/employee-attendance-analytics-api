@@ -2,7 +2,7 @@
 Celery Background Tasks for Reporting and Analytics Export
 """
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from app.core.logging import logger
 from app.db.mongodb import get_database
@@ -20,8 +20,9 @@ from app.workers.celery_app import celery_app
 def generate_monthly_attendance_report(self, emp_code: str, year: int, month: int) -> Dict[str, Any]:
     """
     Idempotent task that compiles a comprehensive monthly attendance report for an employee.
+    Stores the result in the reports collection.
     """
-    task_id = self.request.id
+    task_id = self.request.id if getattr(self, "request", None) else "direct"
     logger.info("Starting monthly report task [%s] for emp_code=%s (%04d-%02d)", task_id, emp_code, year, month)
     try:
         db = get_database()
@@ -48,7 +49,10 @@ def generate_monthly_attendance_report(self, emp_code: str, year: int, month: in
         total_hours = sum(log.get("work_hours", 0.0) for log in logs)
         total_late = sum(log.get("late_minutes", 0) for log in logs)
 
+        idempotency_key = f"monthly_report:{emp_code}:{year:04d}:{month:02d}"
         report = {
+            "idempotency_key": idempotency_key,
+            "type": "monthly_attendance",
             "task_id": task_id,
             "status": "COMPLETED",
             "emp_code": emp_code,
@@ -62,16 +66,19 @@ def generate_monthly_attendance_report(self, emp_code: str, year: int, month: in
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        # Store report idempotently in reports collection
+        # Store report idempotently in reports collection by canonical idempotency key
         db.reports.update_one(
-            {"emp_code": emp_code, "year": year, "month": month, "type": "monthly_attendance"},
-            {"$set": {**report, "type": "monthly_attendance"}},
+            {"idempotency_key": idempotency_key},
+            {"$set": report},
             upsert=True,
         )
 
         logger.info("Successfully finished monthly report task [%s] for emp_code=%s", task_id, emp_code)
         return report
 
+    except ValueError as exc:
+        logger.error("Validation error generating monthly report task [%s]: %s", task_id, exc)
+        raise  # Do not retry permanent validation errors
     except Exception as exc:
         logger.error("Error generating monthly report task [%s]: %s", task_id, exc)
         raise self.retry(exc=exc)
@@ -89,7 +96,7 @@ def export_department_analytics(self, department: str, year: int, month: int) ->
     """
     Idempotent task that compiles and stores department summary analytics.
     """
-    task_id = self.request.id
+    task_id = self.request.id if getattr(self, "request", None) else "direct"
     logger.info("Starting department export task [%s] for department=%s (%04d-%02d)", task_id, department, year, month)
     try:
         db = get_database()
@@ -109,7 +116,10 @@ def export_department_analytics(self, department: str, year: int, month: int) ->
             )
         )
 
+        idempotency_key = f"dept_export:{department}:{year:04d}:{month:02d}"
         export_data = {
+            "idempotency_key": idempotency_key,
+            "type": "department_export",
             "task_id": task_id,
             "status": "COMPLETED",
             "department": department,
@@ -121,14 +131,37 @@ def export_department_analytics(self, department: str, year: int, month: int) ->
         }
 
         db.reports.update_one(
-            {"department": department, "year": year, "month": month, "type": "department_export"},
-            {"$set": {**export_data, "type": "department_export"}},
+            {"idempotency_key": idempotency_key},
+            {"$set": export_data},
             upsert=True,
         )
 
         logger.info("Finished department export task [%s] for department=%s", task_id, department)
         return export_data
 
+    except ValueError as exc:
+        logger.error("Validation error running department export task [%s]: %s", task_id, exc)
+        raise  # Do not retry permanent validation errors
     except Exception as exc:
         logger.error("Error running department export task [%s]: %s", task_id, exc)
         raise self.retry(exc=exc)
+
+
+def get_monthly_attendance_report(emp_code: str, year: int, month: int) -> Optional[Dict[str, Any]]:
+    """Retrieves an existing monthly attendance report from the database."""
+    db = get_database()
+    idempotency_key = f"monthly_report:{emp_code}:{year:04d}:{month:02d}"
+    return db.reports.find_one(
+        {"idempotency_key": idempotency_key},
+        {"_id": 0},
+    )
+
+
+def get_department_analytics_report(department: str, year: int, month: int) -> Optional[Dict[str, Any]]:
+    """Retrieves an existing department export report from the database."""
+    db = get_database()
+    idempotency_key = f"dept_export:{department}:{year:04d}:{month:02d}"
+    return db.reports.find_one(
+        {"idempotency_key": idempotency_key},
+        {"_id": 0},
+    )

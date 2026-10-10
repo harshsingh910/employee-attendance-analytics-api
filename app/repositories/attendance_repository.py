@@ -43,7 +43,7 @@ class AttendanceRepository:
         self,
         record_id: Any,
         punch_out_utc: datetime,
-        work_hours: float,
+        work_hours: Optional[float],
         overtime_minutes: int,
         half_day: bool,
     ) -> Optional[Dict[str, Any]]:

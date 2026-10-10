@@ -12,12 +12,17 @@ from app.schemas.analytics import (
     Leaderboard,
     Trend,
 )
+from app.schemas.common import ErrorResponse
 from app.services.analytics_service import AnalyticsService
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
-@router.get("/employees/{emp_code}/monthly", response_model=EmployeeMonthly)
+@router.get(
+    "/employees/{emp_code}/monthly",
+    response_model=EmployeeMonthly,
+    responses={404: {"model": ErrorResponse, "description": "Employee not found"}},
+)
 def employee_monthly(
     emp_code: str = Path(...),
     month: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
@@ -48,7 +53,11 @@ def late_leaderboard(
     return service.get_late_leaderboard(month=month, limit=limit, department=department)
 
 
-@router.get("/departments/{department}/trend", response_model=Trend)
+@router.get(
+    "/departments/{department}/trend",
+    response_model=Trend,
+    responses={404: {"model": ErrorResponse, "description": "Department not found"}},
+)
 def department_trend(
     department: str = Path(...),
     from_date: str = Query(..., alias="from", pattern=r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$"),

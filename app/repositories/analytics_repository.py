@@ -20,7 +20,7 @@ class AnalyticsRepository:
     def aggregate_employee_monthly(
         self, emp_code: str, first_day: str, last_day: str
     ) -> Optional[Dict[str, Any]]:
-        pipeline = [
+        pipeline: List[Dict[str, Any]] = [
             {
                 "$match": {
                     "emp_code": emp_code,
@@ -286,7 +286,7 @@ class AnalyticsRepository:
         from_dt: datetime,
         to_dt_plus_1: datetime,
     ) -> List[Dict[str, Any]]:
-        pipeline = [
+        pipeline: List[Dict[str, Any]] = [
             {
                 "$match": {
                     "emp_code": {"$in": dept_emp_codes},

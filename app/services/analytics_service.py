@@ -213,7 +213,8 @@ class AnalyticsService:
                 "skip": skip,
                 "limit": page_size,
             }
-            return self.analytics_repo.explain_command("attendance_logs", cmd)
+            exp_res = self.analytics_repo.explain_command("attendance_logs", cmd)
+            return {"endpoint": endpoint, "collection": "attendance_logs", "explain": exp_res}
 
         if not month and endpoint in ("employee_monthly", "department_summary", "late_leaderboard"):
             month = "2026-03"
@@ -231,7 +232,8 @@ class AnalyticsService:
                 {"$group": {"_id": None, "total_late": {"$sum": "$late_minutes"}}},
             ]
             cmd = {"aggregate": "attendance_logs", "pipeline": pipeline, "cursor": {}}
-            return self.analytics_repo.explain_command("attendance_logs", cmd)
+            exp_res = self.analytics_repo.explain_command("attendance_logs", cmd)
+            return {"endpoint": endpoint, "collection": "attendance_logs", "explain": exp_res}
 
         if endpoint == "department_summary":
             match_stage: Dict[str, Any] = {"joined_on": {"$lte": last_day}}
@@ -242,7 +244,8 @@ class AnalyticsService:
                 {"$group": {"_id": "$department", "headcount": {"$sum": 1}}},
             ]
             cmd = {"aggregate": "employees", "pipeline": pipeline, "cursor": {}}
-            return self.analytics_repo.explain_command("employees", cmd)
+            exp_res = self.analytics_repo.explain_command("employees", cmd)
+            return {"endpoint": endpoint, "collection": "employees", "explain": exp_res}
 
         if endpoint == "late_leaderboard":
             pipeline = [
@@ -252,7 +255,8 @@ class AnalyticsService:
                 {"$limit": limit},
             ]
             cmd = {"aggregate": "attendance_logs", "pipeline": pipeline, "cursor": {}}
-            return self.analytics_repo.explain_command("attendance_logs", cmd)
+            exp_res = self.analytics_repo.explain_command("attendance_logs", cmd)
+            return {"endpoint": endpoint, "collection": "attendance_logs", "explain": exp_res}
 
         if endpoint == "department_trend":
             f_d = from_date or "2026-03-01"
@@ -263,6 +267,7 @@ class AnalyticsService:
                 {"$sort": {"_id": 1}},
             ]
             cmd = {"aggregate": "attendance_logs", "pipeline": pipeline, "cursor": {}}
-            return self.analytics_repo.explain_command("attendance_logs", cmd)
+            exp_res = self.analytics_repo.explain_command("attendance_logs", cmd)
+            return {"endpoint": endpoint, "collection": "attendance_logs", "explain": exp_res}
 
         raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Unknown endpoint for explain")

@@ -6,13 +6,19 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 
 from app.api.dependencies import get_employee_service
+from app.schemas.common import ErrorResponse
 from app.schemas.employee import Employee, EmployeeCreate, EmployeePage
 from app.services.employee_service import EmployeeService
 
 router = APIRouter(prefix="/employees", tags=["employees"])
 
 
-@router.post("", response_model=Employee, status_code=201)
+@router.post(
+    "",
+    response_model=Employee,
+    status_code=201,
+    responses={409: {"model": ErrorResponse, "description": "Duplicate employee code"}},
+)
 def create_employee(
     body: EmployeeCreate,
     service: EmployeeService = Depends(get_employee_service),

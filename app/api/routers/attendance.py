@@ -3,7 +3,7 @@ Attendance Management Router
 """
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, Path, Query
 
 from app.api.dependencies import get_attendance_service
 from app.schemas.attendance import (
@@ -13,12 +13,21 @@ from app.schemas.attendance import (
     PunchOutRequest,
     RegularizeRequest,
 )
+from app.schemas.common import ErrorResponse
 from app.services.attendance_service import AttendanceService
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
 
-@router.post("/punch-in", response_model=AttendanceRecord, status_code=201)
+@router.post(
+    "/punch-in",
+    response_model=AttendanceRecord,
+    status_code=201,
+    responses={
+        404: {"model": ErrorResponse, "description": "Employee not found"},
+        409: {"model": ErrorResponse, "description": "Already punched in for this date"},
+    },
+)
 def punch_in(
     body: PunchInRequest,
     service: AttendanceService = Depends(get_attendance_service),
@@ -27,7 +36,14 @@ def punch_in(
     return service.punch_in(body)
 
 
-@router.post("/punch-out", response_model=AttendanceRecord)
+@router.post(
+    "/punch-out",
+    response_model=AttendanceRecord,
+    responses={
+        404: {"model": ErrorResponse, "description": "No punch-in found or employee not found"},
+        409: {"model": ErrorResponse, "description": "Already punched out concurrently"},
+    },
+)
 def punch_out(
     body: PunchOutRequest,
     service: AttendanceService = Depends(get_attendance_service),
@@ -57,11 +73,18 @@ def list_attendance(
     )
 
 
-@router.patch("/{emp_code}/{date}", response_model=AttendanceRecord)
+@router.patch(
+    "/{emp_code}/{date}",
+    response_model=AttendanceRecord,
+    responses={
+        404: {"model": ErrorResponse, "description": "Record not found"},
+        409: {"model": ErrorResponse, "description": "Concurrent modification conflict"},
+    },
+)
 def regularize_attendance(
     emp_code: str = Path(...),
     date: str = Path(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$"),
-    body: RegularizeRequest = ...,
+    body: RegularizeRequest = Body(...),
     service: AttendanceService = Depends(get_attendance_service),
 ):
     """Regularizes an attendance record with append-only audit trail and optimistic locking."""

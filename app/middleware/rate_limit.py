@@ -1,7 +1,7 @@
 """
 Redis-Backed Rate Limiting Middleware
 """
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import redis
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -61,7 +61,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "/openapi.json",
         ]
         self.enabled = enabled if enabled is not None else settings.RATE_LIMIT_ENABLED
-        self._lua_script = None
+        self._lua_script: Any = None
 
     def _get_client_ip(self, request: Request) -> str:
         """
