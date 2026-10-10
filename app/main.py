@@ -7,6 +7,7 @@ Env:  MONGO_URI, MONGO_DB (reads from environment variables, .env file supported
 from __future__ import annotations
 
 import calendar
+import json
 import math
 import os
 import re
@@ -1359,7 +1360,7 @@ def explain_endpoint(
         return {
             "endpoint": endpoint,
             "collection": "attendance_logs",
-            "explain": json_util.loads(json_util.dumps(res)),
+            "explain": json.loads(json_util.dumps(res)),
         }
 
     elif endpoint == "employee_monthly":
@@ -1396,7 +1397,7 @@ def explain_endpoint(
         return {
             "endpoint": endpoint,
             "collection": "attendance_logs",
-            "explain": json_util.loads(json_util.dumps(res)),
+            "explain": json.loads(json_util.dumps(res)),
         }
 
     elif endpoint == "department_summary":
@@ -1452,7 +1453,7 @@ def explain_endpoint(
         return {
             "endpoint": endpoint,
             "collection": "employees",
-            "explain": json_util.loads(json_util.dumps(res)),
+            "explain": json.loads(json_util.dumps(res)),
         }
 
     elif endpoint == "late_leaderboard":
@@ -1490,7 +1491,7 @@ def explain_endpoint(
         return {
             "endpoint": endpoint,
             "collection": "attendance_logs",
-            "explain": json_util.loads(json_util.dumps(res)),
+            "explain": json.loads(json_util.dumps(res)),
         }
 
     elif endpoint == "department_trend":
@@ -1528,7 +1529,7 @@ def explain_endpoint(
         return {
             "endpoint": endpoint,
             "collection": "attendance_logs",
-            "explain": json_util.loads(json_util.dumps(res)),
+            "explain": json.loads(json_util.dumps(res)),
         }
 
     raise HTTPException(status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid endpoint")

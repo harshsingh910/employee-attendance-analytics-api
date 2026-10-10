@@ -512,6 +512,15 @@ def test_explain_endpoints(client):
     assert res5.status_code == 200
     assert res5.json()["collection"] == "attendance_logs"
 
+    # 6. Exact explain regression test for attendance_list with date range
+    res6 = client.get("/admin/explain/attendance_list?emp_code=EMP1002&date_from=2026-10-01&date_to=2026-10-31&page=1&page_size=20")
+    assert res6.status_code == 200
+    d6 = res6.json()
+    assert d6["collection"] == "attendance_logs"
+    assert "executionStats" in d6["explain"]
+    assert "IXSCAN" in str(d6["explain"])
+    assert "COLLSCAN" not in str(d6["explain"])
+
 
 # --------------------------------------------------------------------------- #
 # 12. Concurrency and Race Condition Tests
